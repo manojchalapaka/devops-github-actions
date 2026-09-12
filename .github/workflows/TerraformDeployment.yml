@@ -1,15 +1,6 @@
 name: Terraform Deployment Pipeline For AWS Batch 73
 
 on:
-#   pull_request:
-#     types:
-#       - closed
-#     branches:
-#       - development
-#       - production
-#     paths-ignore:
-#       - 'ReadMe.md'
-
   push:
     branches:
       - development
@@ -18,8 +9,6 @@ on:
       - 'ReadMe.md'
 
 env:
-  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
   AWS_REGION: ${{ vars.AWS_REGION }}
   ENV_DESTROY: "YES"
   TERRAFORM_DESTROY: ${{ vars.TERRAFORM_DESTROY }}
@@ -30,7 +19,7 @@ jobs: # Jobs List
   terraform-checkov:
     if: ${{ vars.TERRAFORM_DESTROY == 'NO' }}
     name: 'Stage_1 - Checkov Security Scanning For Terraform Code'
-    runs-on: ubuntu-latest #Default Runner Provided By GitHub.
+    runs-on: ubuntu-latest # Default Runner Provided By GitHub.
     defaults:
       run:
         working-directory: ./Alpha-Bravo
@@ -44,7 +33,7 @@ jobs: # Jobs List
         with:
           directory: ./Alpha-Bravo
           quiet: true
-          soft_fail: true #Workflow Will Continue Even If Security Checks Fail.
+          soft_fail: true # Workflow Will Continue Even If Security Checks Fail.
           output_format: cli,json
           output_file_path: console,./Alpha-Bravo/results.json
       - name: Upload Checkov Results to S3 Bucket
@@ -52,15 +41,14 @@ jobs: # Jobs List
         env:
           FILE: ./Alpha-Bravo/results.json
           S3_ENDPOINT: 's3.us-east-1.amazonaws.com'
-          S3_BUCKET: "awsb73-checkov-security-reports" #S3 Bucket For Storing Checkov Security Reports.
+          S3_BUCKET: "awsb73-checkov-security-reports"
           S3_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-
 
   terraform-initiate:
     if: ${{ vars.TERRAFORM_DESTROY == 'NO' }}
     name: 'Stage_2 - Terraform Setup, Initialization & Validation'
-    runs-on: ubuntu-latest #Default Runner Provided By GitHub.
+    runs-on: ubuntu-latest # Default Runner Provided By GitHub.
     needs: terraform-checkov
     defaults:
       run:
@@ -72,6 +60,14 @@ jobs: # Jobs List
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "${{ env.TERRAFORM_VERSION }}"
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Verify AWS Identity
+        run: aws sts get-caller-identity
       - name: Print Runner Hostname
         run: echo $HOSTNAME
       - name: Print Branch Name
