@@ -22,9 +22,7 @@ jobs:
   terraform-checkov:
 
     if: ${{ vars.TERRAFORM_DESTROY == 'NO' }}
-
     name: "Stage_1 - Checkov Security Scanning"
-
     runs-on: ubuntu-latest
 
     defaults:
