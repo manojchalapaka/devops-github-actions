@@ -1,8 +1,8 @@
 resource "aws_iam_role" "ec2_role" {
-  name = "${var.rolename}"
+  name = var.rolename
 
-#Trust Policy for EC2
-assume_role_policy = <<EOF
+  #Trust Policy for EC2
+  assume_role_policy = <<EOF
 {
   "Version": "2012-10-17",
   "Statement": [

@@ -1,9 +1,9 @@
 resource "aws_lb" "alb" {
-  name               = var.albname
-  internal           = false
-  load_balancer_type = "application"
-  security_groups    = [var.sg_id]
-  subnets            = var.subnets
+  name                       = var.albname
+  internal                   = false
+  load_balancer_type         = "application"
+  security_groups            = [var.sg_id]
+  subnets                    = var.subnets
   enable_deletion_protection = false
   tags = {
     Environment = var.env
@@ -19,8 +19,8 @@ resource "aws_lb_target_group" "albtest" {
 
 
 resource "aws_lb_target_group_attachment" "albtest" {
-  count = var.env == "Production" || var.env == "Prod" ? 1 : 3
+  count            = var.env == "Production" || var.env == "Prod" ? 1 : 3
   target_group_arn = aws_lb_target_group.albtest.arn
-  target_id        = "${element(var.private_servers, count.index)}"
+  target_id        = element(var.private_servers, count.index)
   port             = 80
 }

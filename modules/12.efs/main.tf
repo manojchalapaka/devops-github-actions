@@ -4,7 +4,7 @@ resource "aws_efs_file_system" "efs" {
   creation_token = "efs-token"
 
   tags = {
-    Name = var.efs_name
+    Name        = var.efs_name
     environment = var.environment
   }
 }

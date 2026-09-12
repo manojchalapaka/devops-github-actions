@@ -9,7 +9,6 @@ module "alpha_elb_alb_1" {
   vpc_id          = module.alpha_vpc_1.vpc_id
   private_servers = module.alpha_compute_1.private_servers
   #*.awsb62.xyz Certificate ARN
-  alb_certificate_arn = var.alb_certificate_arn
 }
 
 
