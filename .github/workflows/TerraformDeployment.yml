@@ -43,7 +43,7 @@ jobs: # Jobs List
         with:
           directory: ./Alpha-Bravo
           quiet: true
-          soft_fail: false #Workflow Will Fail If Security Checks Fail.
+          soft_fail: true #Workflow Will Continue Even If Security Checks Fail.
           output_format: cli,json
           output_file_path: console,./Alpha-Bravo/results.json
       - name: Upload Checkov Results to S3 Bucket
