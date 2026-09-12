@@ -1,4 +1,4 @@
-name: Terraform Deployment Yaml Pipeline For AWS Batch 73
+name: Terraform Deployment Pipeline For AWS Batch 73
 
 on:
   push:
@@ -10,116 +10,226 @@ on:
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION }}
-  ENV_DESTROY: "NO"
   TERRAFORM_DESTROY: ${{ vars.TERRAFORM_DESTROY }}
   TERRAFORM_VERSION: "1.14.0"
 
-jobs: # Jobs List
+jobs:
+
+  # ============================================================
+  # STAGE 1 - CHECKOV SECURITY SCANNING
+  # ============================================================
 
   terraform-checkov:
+
     if: ${{ vars.TERRAFORM_DESTROY == 'NO' }}
-    name: 'Stage_1 - Checkov Security Scanning For Terraform Code'
-    runs-on: ubuntu-latest # Default Runner Provided By GitHub.
+
+    name: "Stage_1 - Checkov Security Scanning"
+
+    runs-on: ubuntu-latest
+
     defaults:
       run:
         working-directory: ./Alpha-Bravo
+
     steps:
-      - name: Checkout The Code Repository
+
+      - name: Checkout Repository
         uses: actions/checkout@v5
+
       - name: Print Runner Hostname
         run: echo $HOSTNAME
-      - name: Setup Checkov For Security Scanning
+
+      - name: Setup Checkov Security Scan
         uses: bridgecrewio/checkov-action@v12
         with:
           directory: ./Alpha-Bravo
           quiet: true
-          soft_fail: true # Workflow Will Continue Even If Security Checks Fail.
+          soft_fail: true
           output_format: cli,json
           output_file_path: console,./Alpha-Bravo/results.json
-      - name: Upload Checkov Results to S3 Bucket
+
+      - name: Upload Checkov Results To S3
         uses: koraykoska/s3-upload-github-action@master
         env:
           FILE: ./Alpha-Bravo/results.json
-          S3_ENDPOINT: 's3.us-east-1.amazonaws.com'
+          S3_ENDPOINT: "s3.us-east-1.amazonaws.com"
           S3_BUCKET: "awsb73-checkov-security-reports"
           S3_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
+
+  # ============================================================
+  # STAGE 2 - TERRAFORM INIT & VALIDATE
+  # ============================================================
+
   terraform-initiate:
+
     if: ${{ vars.TERRAFORM_DESTROY == 'NO' }}
-    name: 'Stage_2 - Terraform Setup, Initialization & Validation'
-    runs-on: ubuntu-latest # Default Runner Provided By GitHub.
+
+    name: "Stage_2 - Terraform Setup Initialization Validation"
+
+    runs-on: ubuntu-latest
+
     needs: terraform-checkov
+
     defaults:
       run:
         working-directory: ./Alpha-Bravo
+
     steps:
-      - name: Checkout The Code Repository
+
+      - name: Checkout Repository
         uses: actions/checkout@v5
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: "${{ env.TERRAFORM_VERSION }}"
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ vars.AWS_REGION }}
+
       - name: Verify AWS Identity
         run: aws sts get-caller-identity
+
       - name: Print Runner Hostname
         run: echo $HOSTNAME
+
       - name: Print Branch Name
-        run: echo ${GITHUB_REF}
-      - name: Terraform Init, Format, Validate
-        run: terraform init && terraform fmt && terraform validate
-      - name: Creating Terraform Workspaces
+        run: echo $GITHUB_REF
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Format Check
+        run: terraform fmt -check
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Create Terraform Workspaces
         run: |
           terraform workspace select dev || terraform workspace new dev
           terraform workspace select prod || terraform workspace new prod
+
       - name: List Terraform Workspaces
         run: terraform workspace list
 
 
+  # ============================================================
+  # STAGE 3 - TERRAFORM PLAN
+  # ============================================================
+
   terraform-plan:
+
     if: ${{ vars.TERRAFORM_DESTROY == 'NO' }}
-    name: 'Stage_3 - Terraform Plan'
+
+    name: "Stage_3 - Terraform Plan"
+
     runs-on: ubuntu-latest
+
     needs: terraform-initiate
+
     defaults:
       run:
         working-directory: ./Alpha-Bravo
+
     steps:
-      - name: Checkout
+
+      - name: Checkout Repository
         uses: actions/checkout@v5
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: "${{ env.TERRAFORM_VERSION }}"
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ vars.AWS_REGION }}
-      - name: Print Runner Hostname
-        run: echo $HOSTNAME
-      - name: Print Branch Name
-        run: echo ${GITHUB_REF}
-      - name: Terraform Init, Format, Validate
-        run: terraform init && terraform fmt && terraform validate
-      - name: Print Branch Reference
-        run: echo The Current Branch Is $GITHUB_REF
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
       - name: Terraform Plan For Development
-        if: github.ref == 'refs/heads/development' && env.ENV_DESTROY == 'NO'
+        if: github.ref == 'refs/heads/development'
         run: |
-          echo "Running Terraform Plan For Development Environment"
-          terraform workspace select dev
-          terraform plan --var-file=Alpha.tfvars
+          echo "Running Terraform Plan For Development"
+          terraform workspace select dev || terraform workspace new dev
+          terraform plan -var-file=Alpha.tfvars
+
       - name: Terraform Plan For Production
-        if: github.ref == 'refs/heads/production' && env.ENV_DESTROY == 'NO'
+        if: github.ref == 'refs/heads/production'
         run: |
-          echo "Running Terraform Plan For Production Environment"
-          terraform workspace select prod
-          terraform plan --var-file=Bravo.tfvars
+          echo "Running Terraform Plan For Production"
+          terraform workspace select prod || terraform workspace new prod
+          terraform plan -var-file=Bravo.tfvars
+
+
+  # ============================================================
+  # STAGE 4 - TERRAFORM APPLY
+  # ============================================================
+
+  terraform-apply:
+
+    if: ${{ vars.TERRAFORM_DESTROY == 'NO' }}
+
+    name: "Stage_4 - Terraform Apply"
+
+    runs-on: ubuntu-latest
+
+    needs: terraform-plan
+
+    defaults:
+      run:
+        working-directory: ./Alpha-Bravo
+
+    steps:
+
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Verify AWS Identity
+        run: aws sts get-caller-identity
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply For Development
+        if: github.ref == 'refs/heads/development'
+        run: |
+          echo "Running Terraform Apply For Development"
+          terraform workspace select dev || terraform workspace new dev
+          terraform apply -var-file=Alpha.tfvars -auto-approve
+
+      - name: Terraform Apply For Production
+        if: github.ref == 'refs/heads/production'
+        run: |
+          echo "Running Terraform Apply For Production"
+          terraform workspace select prod || terraform workspace new prod
+          terraform apply -var-file=Bravo.tfvars -auto-approve
+
+      - name: List Terraform Created Resources
+        run: terraform state list
