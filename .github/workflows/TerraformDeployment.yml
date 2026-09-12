@@ -1,4 +1,4 @@
-name: Terraform Deployment Pipeline For AWS Batch 73
+name: Terraform Deployment Yaml Pipeline For AWS Batch 73
 
 on:
   push:
