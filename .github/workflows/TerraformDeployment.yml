@@ -1,6 +1,6 @@
 name: Terraform Deployment Pipeline For AWS Batch 73
 
-# on:
+on:
 #   pull_request:
 #     types:
 #       - closed
