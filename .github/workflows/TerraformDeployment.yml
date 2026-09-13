@@ -1,6 +1,14 @@
 name: Terraform Deployment Pipeline For AWS Batch 73
 
 on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - production
+    paths-ignore:
+      - 'ReadMe.md'
+
   push:
     branches:
       - development
@@ -9,6 +17,7 @@ on:
       - 'ReadMe.md'
 
   workflow_dispatch:
+
 env:
   AWS_REGION: ${{ vars.AWS_REGION }}
   TERRAFORM_DESTROY: ${{ vars.TERRAFORM_DESTROY }}
