@@ -8,6 +8,8 @@ on:
     paths-ignore:
       - 'ReadMe.md'
 
+  workflow_dispatch:
+
 env:
   AWS_REGION: ${{ vars.AWS_REGION }}
   TERRAFORM_DESTROY: ${{ vars.TERRAFORM_DESTROY }}
