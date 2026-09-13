@@ -1,14 +1,8 @@
 name: Terraform Deployment Pipeline For AWS Batch 73
 
 on:
-  pull_request:
-    types:
-      - closed
-    branches:
-      - production
-    paths-ignore:
-      - 'ReadMe.md'
 
+  # Trigger when code is pushed directly OR merged into development/production
   push:
     branches:
       - development
@@ -16,6 +10,7 @@ on:
     paths-ignore:
       - 'ReadMe.md'
 
+  # Manual trigger
   workflow_dispatch:
 
 env:
@@ -32,7 +27,9 @@ jobs:
   terraform-checkov:
 
     if: ${{ vars.TERRAFORM_DESTROY == 'NO' }}
+
     name: "Stage_1 - Checkov Security Scanning"
+
     runs-on: ubuntu-latest
 
     defaults:
@@ -169,12 +166,18 @@ jobs:
       - name: Terraform Validate
         run: terraform validate
 
+
+      # ================= DEVELOPMENT =================
+
       - name: Terraform Plan For Development
         if: github.ref == 'refs/heads/development'
         run: |
           echo "Running Terraform Plan For Development"
           terraform workspace select dev || terraform workspace new dev
           terraform plan -var-file=Alpha.tfvars
+
+
+      # ================= PRODUCTION =================
 
       - name: Terraform Plan For Production
         if: github.ref == 'refs/heads/production'
@@ -225,12 +228,18 @@ jobs:
       - name: Terraform Init
         run: terraform init
 
+
+      # ================= DEVELOPMENT =================
+
       - name: Terraform Apply For Development
         if: github.ref == 'refs/heads/development'
         run: |
           echo "Running Terraform Apply For Development"
           terraform workspace select dev || terraform workspace new dev
           terraform apply -var-file=Alpha.tfvars -auto-approve
+
+
+      # ================= PRODUCTION =================
 
       - name: Terraform Apply For Production
         if: github.ref == 'refs/heads/production'
@@ -241,4 +250,3 @@ jobs:
 
       - name: List Terraform Created Resources
         run: terraform state list
-
