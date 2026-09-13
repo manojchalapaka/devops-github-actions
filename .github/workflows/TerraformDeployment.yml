@@ -9,7 +9,6 @@ on:
       - 'ReadMe.md'
 
   workflow_dispatch:
-
 env:
   AWS_REGION: ${{ vars.AWS_REGION }}
   TERRAFORM_DESTROY: ${{ vars.TERRAFORM_DESTROY }}
@@ -233,3 +232,4 @@ jobs:
 
       - name: List Terraform Created Resources
         run: terraform state list
+
