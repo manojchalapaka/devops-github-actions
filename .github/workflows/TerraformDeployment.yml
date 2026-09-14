@@ -13,10 +13,20 @@ on:
   # Manual trigger
   workflow_dispatch:
 
+
 env:
+
   AWS_REGION: ${{ vars.AWS_REGION }}
+
+  # Environment-specific destroy controls
+  ENV_DESTROY_DEV: "NO"
+  ENV_DESTROY_PROD: "NO"
+
+  # Main Terraform destroy control
   TERRAFORM_DESTROY: ${{ vars.TERRAFORM_DESTROY }}
+
   TERRAFORM_VERSION: "1.14.0"
+
 
 jobs:
 
@@ -26,6 +36,7 @@ jobs:
 
   terraform-checkov:
 
+    # Run normal deployment pipeline only when destroy is NO
     if: ${{ vars.TERRAFORM_DESTROY == 'NO' }}
 
     name: "Stage_1 - Checkov Security Scanning"
@@ -250,3 +261,79 @@ jobs:
 
       - name: List Terraform Created Resources
         run: terraform state list
+
+
+  # ============================================================
+  # STAGE 5 - TERRAFORM DESTROY
+  # ============================================================
+
+  terraform-destroy:
+
+    # Destroy job runs only when TERRAFORM_DESTROY = YES
+    if: ${{ vars.TERRAFORM_DESTROY == 'YES' }}
+
+    name: "Stage_5 - Terraform Destroy"
+
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./Alpha-Bravo
+
+    steps:
+
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Verify AWS Identity
+        run: aws sts get-caller-identity
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Print Branch Reference
+        run: echo "The Current Branch Is $GITHUB_REF"
+
+
+      # ============================================================
+      # PERFORM TERRAFORM DESTROY
+      # ============================================================
+
+      - name: Perform Terraform Destroy
+        run: |
+
+          if [ "$GITHUB_REF" == "refs/heads/development" ] && [ "$ENV_DESTROY_DEV" == "YES" ]; then
+
+            echo "Running Terraform Destroy For Development Environment"
+
+            terraform workspace select dev || terraform workspace new dev
+
+            terraform destroy -var-file=Alpha.tfvars -auto-approve
+
+
+          elif [ "$GITHUB_REF" == "refs/heads/production" ] && [ "$ENV_DESTROY_PROD" == "YES" ]; then
+
+            echo "Running Terraform Destroy For Production Environment"
+
+            terraform workspace select prod || terraform workspace new prod
+
+            terraform destroy -var-file=Bravo.tfvars -auto-approve
+
+
+          else
+
+            echo "Terraform Destroy Not Enabled For This Environment"
+
+          fi
