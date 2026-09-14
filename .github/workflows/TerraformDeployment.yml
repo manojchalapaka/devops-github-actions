@@ -18,8 +18,11 @@ env:
 
   AWS_REGION: ${{ vars.AWS_REGION }}
 
-  # Environment-specific destroy controls
-  ENV_DESTROY_DEV: "NO"
+  # ============================================================
+  # CASE 2 - DESTROY DEVELOPMENT ONLY
+  # ============================================================
+
+  ENV_DESTROY_DEV: "YES"
   ENV_DESTROY_PROD: "NO"
 
   # Main Terraform destroy control
@@ -35,9 +38,6 @@ jobs:
   # ============================================================
 
   terraform-checkov:
-
-    # Run normal deployment pipeline only when destroy is NO
-    if: ${{ vars.TERRAFORM_DESTROY == 'NO' }}
 
     name: "Stage_1 - Checkov Security Scanning"
 
@@ -79,8 +79,6 @@ jobs:
   # ============================================================
 
   terraform-initiate:
-
-    if: ${{ vars.TERRAFORM_DESTROY == 'NO' }}
 
     name: "Stage_2 - Terraform Setup Initialization Validation"
 
@@ -142,8 +140,6 @@ jobs:
 
   terraform-plan:
 
-    if: ${{ vars.TERRAFORM_DESTROY == 'NO' }}
-
     name: "Stage_3 - Terraform Plan"
 
     runs-on: ubuntu-latest
@@ -203,8 +199,6 @@ jobs:
   # ============================================================
 
   terraform-apply:
-
-    if: ${{ vars.TERRAFORM_DESTROY == 'NO' }}
 
     name: "Stage_4 - Terraform Apply"
 
@@ -269,12 +263,14 @@ jobs:
 
   terraform-destroy:
 
-    # Destroy job runs only when TERRAFORM_DESTROY = YES
+    # Destroy stage runs only when TERRAFORM_DESTROY = YES
     if: ${{ vars.TERRAFORM_DESTROY == 'YES' }}
 
     name: "Stage_5 - Terraform Destroy"
 
     runs-on: ubuntu-latest
+
+    needs: terraform-apply
 
     defaults:
       run:
