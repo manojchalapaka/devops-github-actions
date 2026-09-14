@@ -2,7 +2,6 @@ name: Terraform Deployment Pipeline For AWS Batch 73
 
 on:
 
-  # Trigger when code is pushed directly OR merged into development/production
   push:
     branches:
       - development
@@ -10,7 +9,6 @@ on:
     paths-ignore:
       - 'ReadMe.md'
 
-  # Manual trigger
   workflow_dispatch:
 
 
@@ -24,9 +22,6 @@ env:
 
   ENV_DESTROY_DEV: "YES"
   ENV_DESTROY_PROD: "NO"
-
-  # Main Terraform destroy control
-  TERRAFORM_DESTROY: ${{ vars.TERRAFORM_DESTROY }}
 
   TERRAFORM_VERSION: "1.14.0"
 
@@ -263,13 +258,14 @@ jobs:
 
   terraform-destroy:
 
-    # Destroy stage runs only when TERRAFORM_DESTROY = YES
-    if: ${{ vars.TERRAFORM_DESTROY == 'YES' }}
-
     name: "Stage_5 - Terraform Destroy"
+
+    # Stage 5 runs only when Repository Variable = YES
+    if: ${{ vars.TERRAFORM_DESTROY == 'YES' }}
 
     runs-on: ubuntu-latest
 
+    # Run destroy only after successful Terraform Apply
     needs: terraform-apply
 
     defaults:
