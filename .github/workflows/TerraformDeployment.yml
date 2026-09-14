@@ -1,8 +1,6 @@
 name: Terraform Deployment Pipeline For AWS Batch 73
 
 on:
-
-  # Trigger when code is pushed directly OR merged into development/production
   push:
     branches:
       - development
@@ -10,7 +8,6 @@ on:
     paths-ignore:
       - 'ReadMe.md'
 
-  # Manual trigger
   workflow_dispatch:
 
 
@@ -19,13 +16,12 @@ env:
   AWS_REGION: ${{ vars.AWS_REGION }}
 
   # ============================================================
-  # CASE 3 - DESTROY PRODUCTION ONLY
+  # DESTROY CONTROLS
   # ============================================================
 
-  ENV_DESTROY_DEV: "NO"
-  ENV_DESTROY_PROD: "YES"
+  ENV_DESTROY_DEV: "YES"
+  ENV_DESTROY_PROD: "NO"
 
-  # Main Terraform destroy control
   TERRAFORM_DESTROY: ${{ vars.TERRAFORM_DESTROY }}
 
   TERRAFORM_VERSION: "1.14.0"
@@ -110,12 +106,6 @@ jobs:
       - name: Verify AWS Identity
         run: aws sts get-caller-identity
 
-      - name: Print Runner Hostname
-        run: echo $HOSTNAME
-
-      - name: Print Branch Name
-        run: echo $GITHUB_REF
-
       - name: Terraform Init
         run: terraform init
 
@@ -124,14 +114,6 @@ jobs:
 
       - name: Terraform Validate
         run: terraform validate
-
-      - name: Create Terraform Workspaces
-        run: |
-          terraform workspace select dev || terraform workspace new dev
-          terraform workspace select prod || terraform workspace new prod
-
-      - name: List Terraform Workspaces
-        run: terraform workspace list
 
 
   # ============================================================
@@ -145,6 +127,9 @@ jobs:
     runs-on: ubuntu-latest
 
     needs: terraform-initiate
+
+    # Don't run normal plan when DEV destroy is enabled
+    if: ${{ !(github.ref == 'refs/heads/development' && vars.TERRAFORM_DESTROY == 'YES') }}
 
     defaults:
       run:
@@ -170,26 +155,15 @@ jobs:
       - name: Terraform Init
         run: terraform init
 
-      - name: Terraform Validate
-        run: terraform validate
-
-
-      # ================= DEVELOPMENT =================
-
       - name: Terraform Plan For Development
         if: github.ref == 'refs/heads/development'
         run: |
-          echo "Running Terraform Plan For Development"
           terraform workspace select dev || terraform workspace new dev
           terraform plan -var-file=Alpha.tfvars
-
-
-      # ================= PRODUCTION =================
 
       - name: Terraform Plan For Production
         if: github.ref == 'refs/heads/production'
         run: |
-          echo "Running Terraform Plan For Production"
           terraform workspace select prod || terraform workspace new prod
           terraform plan -var-file=Bravo.tfvars
 
@@ -206,6 +180,9 @@ jobs:
 
     needs: terraform-plan
 
+    # Run only if previous normal pipeline is running
+    if: ${{ needs.terraform-plan.result == 'success' }}
+
     defaults:
       run:
         working-directory: ./Alpha-Bravo
@@ -227,34 +204,20 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ vars.AWS_REGION }}
 
-      - name: Verify AWS Identity
-        run: aws sts get-caller-identity
-
       - name: Terraform Init
         run: terraform init
-
-
-      # ================= DEVELOPMENT =================
 
       - name: Terraform Apply For Development
         if: github.ref == 'refs/heads/development'
         run: |
-          echo "Running Terraform Apply For Development"
           terraform workspace select dev || terraform workspace new dev
           terraform apply -var-file=Alpha.tfvars -auto-approve
-
-
-      # ================= PRODUCTION =================
 
       - name: Terraform Apply For Production
         if: github.ref == 'refs/heads/production'
         run: |
-          echo "Running Terraform Apply For Production"
           terraform workspace select prod || terraform workspace new prod
           terraform apply -var-file=Bravo.tfvars -auto-approve
-
-      - name: List Terraform Created Resources
-        run: terraform state list
 
 
   # ============================================================
@@ -263,14 +226,14 @@ jobs:
 
   terraform-destroy:
 
-    # Destroy stage runs only when TERRAFORM_DESTROY = YES
-    if: ${{ vars.TERRAFORM_DESTROY == 'YES' }}
-
-    name: "Stage_5 - Terraform Destroy"
+    name: "Stage_5 - Terraform Destroy DEV Only"
 
     runs-on: ubuntu-latest
 
-    needs: terraform-apply
+    # Run directly after Stage 2 for DEV destroy
+    needs: terraform-initiate
+
+    if: ${{ github.ref == 'refs/heads/development' && vars.TERRAFORM_DESTROY == 'YES' }}
 
     defaults:
       run:
@@ -299,37 +262,19 @@ jobs:
       - name: Terraform Init
         run: terraform init
 
-      - name: Print Branch Reference
-        run: echo "The Current Branch Is $GITHUB_REF"
-
-
-      # ============================================================
-      # PERFORM TERRAFORM DESTROY
-      # ============================================================
-
-      - name: Perform Terraform Destroy
+      - name: Destroy Development Environment Only
         run: |
+          echo "Current Branch: $GITHUB_REF"
+          echo "Destroying Development Environment Only"
 
-          if [ "$GITHUB_REF" == "refs/heads/development" ] && [ "$ENV_DESTROY_DEV" == "YES" ]; then
+          terraform workspace select dev
 
-            echo "Running Terraform Destroy For Development Environment"
+          terraform destroy -var-file=Alpha.tfvars -auto-approve
 
-            terraform workspace select dev || terraform workspace new dev
-
-            terraform destroy -var-file=Alpha.tfvars -auto-approve
-
-
-          elif [ "$GITHUB_REF" == "refs/heads/production" ] && [ "$ENV_DESTROY_PROD" == "YES" ]; then
-
-            echo "Running Terraform Destroy For Production Environment"
-
-            terraform workspace select prod || terraform workspace new prod
-
-            terraform destroy -var-file=Bravo.tfvars -auto-approve
+          echo "Development Environment Destroy Completed"
 
 
-          else
-
-            echo "Terraform Destroy Not Enabled For This Environment"
-
-          fi
+      - name: Verify Development State
+        run: |
+          terraform workspace select dev
+          terraform state list
